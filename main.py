@@ -170,7 +170,8 @@ def get_admin_reservations():
     reservations = g.db.query(models.Reservation).all()
     return jsonify([{
         "id": r.id, "session_id": r.session_id, "seat_id": r.seat_id,
-        "user_name": r.user_name, "phone": r.phone, "claimed": r.claimed
+        "user_name": r.user_name, "phone": r.phone, "claimed": r.claimed,
+        "created_at": r.created_at.strftime("%m/%d %H:%M") if r.created_at else ""
     } for r in reservations])
 
 @app.route("/api/admin/claim/bulk", methods=["POST"])

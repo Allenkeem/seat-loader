@@ -67,6 +67,7 @@
                     <th>이름</th>
                     <th>연락처</th>
                     <th>좌석</th>
+                    <th>예매 일시</th>
                     <th>상태</th>
                     <th>단일액션</th>
                 </tr>
@@ -174,6 +175,7 @@
                     <td>${r.user_name}</td>
                     <td>${r.phone}</td>
                     <td><strong style="color: var(--primary);">${displaySeat}</strong></td>
+                    <td style="color:#64748b; font-size:0.85rem; white-space:nowrap;">${r.created_at || '-'}</td>
                     <td>
                         <span class="status-badge ${r.claimed ? 'claimed' : 'pending'}">
                             ${r.claimed ? '수령 완료' : '대기중'}
