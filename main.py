@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 import database, models
 
 def hash_password(raw: str) -> str:
-    salt = os.environ.get('PASSWORD_SALT', 'sogang-drama-club')
+    salt = os.environ.get('PASSWORD_SALT')
+    if not salt:
+        raise RuntimeError("PASSWORD_SALT environment variable is not set")
     return hashlib.sha256(f"{salt}:{raw}".encode()).hexdigest()
 
 # DB Schema init
@@ -54,7 +56,7 @@ def authenticate_admin():
     auth = request.authorization
     if not auth or not auth.username or not auth.password:
         return False
-    admin_pw = os.environ.get('ADMIN_PASSWORD', 'sogang1234')
+    admin_pw = os.environ.get('ADMIN_PASSWORD', '')
     correct_username = secrets.compare_digest(auth.username, "admin")
     correct_password = secrets.compare_digest(auth.password, admin_pw)
     return correct_username and correct_password
