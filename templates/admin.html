@@ -110,7 +110,9 @@
                     <!-- Right Column: Map -->
                     <div style="flex: 2; min-width: 350px;">
                         <div class="stage">STAGE</div>
-                        <div class="seat-map" id="admin-seat-map" style="display: flex; flex-direction: column; gap: 0.8rem; transform: scale(0.95); transform-origin: top center;">
+                        <div style="transform: scale(0.95); transform-origin: top center; overflow-x: auto;">
+                        <div class="seat-map" id="admin-seat-map"></div>
+                        </div>
                             <!-- render seats -->
                         </div>
                     </div>
@@ -301,33 +303,37 @@
         function renderAdminSeatMap() {
             const container = document.getElementById('admin-seat-map');
             container.innerHTML = '';
-            
-            const rows = ['A','B','C','D','E','F','G','H'];
-            rows.forEach(r => {
-                const rowData = adminSeatsData.filter(s => s.row === r).sort((a,b) => a.number - b.number);
-                if (rowData.length === 0) return;
-                
-                const rowDiv = document.createElement('div');
-                rowDiv.className = 'seat-row';
-                // Inline styles to match booking row perfectly
-                rowDiv.style.display = 'flex';
-                rowDiv.style.justifyContent = 'center';
-                rowDiv.style.gap = '0.5rem';
 
-                rowDiv.innerHTML = `<div class="row-label">${r}</div>`;
-                
-                rowData.forEach(s => {
+            const rows = ['A','B','C','D','E','F','G'];
+            rows.forEach(r => {
+                if (r === 'E') {
+                    const fence = document.createElement('div');
+                    fence.className = 'seat-fence';
+                    fence.textContent = '— 펜스 —';
+                    container.appendChild(fence);
+                }
+
+                const label = document.createElement('div');
+                label.className = 'row-label';
+                label.innerText = r;
+                container.appendChild(label);
+
+                for (let num = 1; num <= 12; num++) {
+                    const seatData = adminSeatsData.find(s => s.row === r && s.number === num);
                     const btn = document.createElement('div');
-                    const isSelected = adminSelectedSeats.some(sel => sel.id === s.id);
-                    btn.className = `seat ${s.status === 'reserved' ? 'reserved' : 'available'} ${isSelected ? 'selected' : ''}`;
-                    btn.innerText = s.number;
-                    
-                    if (s.status === 'available' || isSelected) {
-                        btn.onclick = () => toggleAdminSeat(s);
+
+                    if (!seatData) {
+                        btn.className = 'seat empty';
+                    } else {
+                        const isSelected = adminSelectedSeats.some(sel => sel.id === seatData.id);
+                        btn.className = `seat ${seatData.status === 'reserved' ? 'reserved' : 'available'}${isSelected ? ' selected' : ''}`;
+                        btn.innerText = num;
+                        if (seatData.status === 'available' || isSelected) {
+                            btn.onclick = () => toggleAdminSeat(seatData);
+                        }
                     }
-                    rowDiv.appendChild(btn);
-                });
-                container.appendChild(rowDiv);
+                    container.appendChild(btn);
+                }
             });
         }
 
