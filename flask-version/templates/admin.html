@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>관리자 패널 - 메리홀 티켓팅</title>
+    <link rel="stylesheet" href="/static/style.css?v=5.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard-dynamic-subset.min.css">
+    <style>
+        .admin-modal {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.6);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .admin-modal.hidden { display: none !important; }
+        .admin-modal-content {
+            background: white; padding: 2.5rem; border-radius: 16px;
+            width: 100%; max-width: 850px;
+            max-height: 90vh; overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        }
+        .admin-form-label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #334155; }
+        .admin-form-input { 
+            width: 100%; padding: 0.75rem; border-radius: 8px; 
+            border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; 
+            font-size: 1rem; font-family: inherit; margin-bottom: 1.5rem;
+        }
+        /* Override seat map styles for light mode admin */
+        .admin-modal-content .row-label { color: #475569 !important; font-weight: bold; width: 1.5rem; text-align: center; margin-right: 0.5rem; display: flex; align-items: center; justify-content: center; }
+        .admin-modal-content .stage { color: #cbd5e1; border: 2px solid #e2e8f0; background: #f8fafc; text-align: center; padding: 0.8rem; border-radius: 8px; margin-bottom: 2rem; font-weight: 700; letter-spacing: 0.5rem; }
+    </style>
+</head>
+<body class="admin-body">
+    <header class="admin-header">
+        <h1>티켓 발권 및 관리 (어드민)</h1>
+        <div>
+            <button id="refresh-btn" class="btn btn-secondary">새로고침</button>
+        </div>
+    </header>
+
+    <div class="admin-container">
+        <!-- Tabs -->
+        <ul class="tabs" id="session-tabs">
+            <li class="tab active" data-tab="all" onclick="filterSession('all')">전체보기</li>
+            <!-- Dynamically populated -->
+        </ul>
+
+        <!-- Action Bar -->
+        <div class="action-bar" id="action-bar">
+            <div>
+                <span id="selected-count-label" style="font-weight: 600; font-size: 1.1rem; color: #0f172a; margin-right: 1rem;">0매 선택됨</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary btn-small" onclick="bulkClaimSelected()">✅ 선택 발권</button>
+                <button class="btn btn-secondary btn-small" style="background: #334155; color: white; border: none;" onclick="openEditModal()">✏️ 예매 수정</button>
+                <button class="btn btn-secondary btn-small" style="background: #ef4444; color: white; border: none;" onclick="bulkCancelSelected()">🗑️ 예매 취소</button>
+            </div>
+        </div>
+
+        <table class="reservation-table">
+            <thead>
+                <tr>
+                    <th width="40"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+                    <th width="80">예매번호</th>
+                    <th>회차</th>
+                    <th>이름</th>
+                    <th>연락처</th>
+                    <th>좌석</th>
+                    <th>상태</th>
+                    <th>단일액션</th>
+                </tr>
+            </thead>
+            <tbody id="reservation-list">
+                <!-- Rows map -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="admin-modal hidden">
+        <div class="admin-modal-content">
+            <h2 style="font-size: 1.5rem; color: #0f172a; margin-bottom: 0.5rem;">예매 수정 (시각적 선택)</h2>
+            <p id="edit-summary" style="margin-bottom: 1.5rem; color: #64748b; font-size: 0.95rem;"></p>
+            
+            <form id="edit-form">
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                    
+                    <!-- Left Column: Controls -->
+                    <div style="flex: 1; min-width: 250px;">
+                        <label class="admin-form-label">이동할 회차 정하기</label>
+                        <select id="edit-session" class="admin-form-input" required onchange="fetchAdminSeats()">
+                        </select>
+                        
+                        <div style="background:#f8fafc; padding:1.5rem; border-radius:12px; border:1px solid #e2e8f0;">
+                            <p style="margin-bottom:0.8rem; font-weight:600; color:#334155;">
+                                선택된 빈 좌석 (<span id="edit-selected-count" style="color:var(--primary); font-size: 1.1rem;">0</span> / <span id="edit-target-count">0</span>)
+                            </p>
+                            <div id="edit-selected-list" style="display:flex; gap:0.5rem; flex-wrap:wrap; min-height: 2rem;">
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 2rem;">
+                            <button type="button" class="btn btn-secondary" onclick="closeEditModal()">취소</button>
+                            <button type="submit" class="btn btn-primary" id="edit-btn" disabled>수정 적용</button>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Map -->
+                    <div style="flex: 2; min-width: 350px;">
+                        <div class="stage">STAGE</div>
+                        <div class="seat-map" id="admin-seat-map" style="display: flex; flex-direction: column; gap: 0.8rem; transform: scale(0.95); transform-origin: top center;">
+                            <!-- render seats -->
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let sessionMap = {};
+        let reservationsData = [];
+        let currentTab = 'all';
+
+        async function fetchSessions() {
+            try {
+                const res = await fetch('/api/sessions');
+                const data = await res.json();
+                const tabsUi = document.getElementById('session-tabs');
+                const selectUi = document.getElementById('edit-session');
+                
+                data.forEach(s => {
+                    sessionMap[s.id] = s.name;
+                    tabsUi.innerHTML += `<li class="tab" data-tab="${s.id}" onclick="filterSession(${s.id})">${s.name}</li>`;
+                    selectUi.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                });
+            } catch(e) { console.error(e); }
+        }
+
+        async function loadReservations() {
+            if (Object.keys(sessionMap).length === 0) await fetchSessions();
+            
+            const res = await fetch('/api/admin/reservations');
+            reservationsData = await res.json();
+            renderTable();
+        }
+
+        function filterSession(tabId) {
+            currentTab = tabId;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tabId}"]`).classList.add('active');
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('reservation-list');
+            tbody.innerHTML = '';
+            document.getElementById('selectAll').checked = false;
+            updateActionBar(); 
+            
+            let filtered = reservationsData;
+            if (currentTab !== 'all') {
+                filtered = reservationsData.filter(r => r.session_id == currentTab);
+            }
+            
+            filtered.forEach(r => {
+                const tr = document.createElement('tr');
+                const displaySeat = r.seat_id.includes('_') ? r.seat_id.split('_')[1] : r.seat_id;
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="row-check" value="${r.id}" onchange="updateActionBar()"></td>
+                    <td>${r.id}</td>
+                    <td><strong>${sessionMap[r.session_id] || r.session_id + '회차'}</strong></td>
+                    <td>${r.user_name}</td>
+                    <td>${r.phone}</td>
+                    <td><strong style="color: var(--primary);">${displaySeat}</strong></td>
+                    <td>
+                        <span class="status-badge ${r.claimed ? 'claimed' : 'pending'}">
+                            ${r.claimed ? '수령 완료' : '대기중'}
+                        </span>
+                    </td>
+                    <td>
+                        ${!r.claimed ? `<button class="btn btn-small" onclick="claimTicket(${r.id})" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">발권</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleSelectAll(source) {
+            const checkboxes = document.querySelectorAll('.row-check');
+            checkboxes.forEach(cb => cb.checked = source.checked);
+            updateActionBar();
+        }
+
+        function getSelectedIds() {
+            const checkboxes = document.querySelectorAll('.row-check:checked');
+            return Array.from(checkboxes).map(cb => parseInt(cb.value));
+        }
+
+        function updateActionBar() {
+            const ids = getSelectedIds();
+            const bar = document.getElementById('action-bar');
+            document.getElementById('selected-count-label').innerText = ids.length + "매 선택됨";
+            
+            if (ids.length > 0) {
+                bar.classList.add('visible');
+            } else {
+                bar.classList.remove('visible');
+            }
+        }
+
+        async function claimTicket(id) {
+            if(!confirm("해당 티켓을 발권 처리하시겠습니까?")) return;
+            const res = await fetch(`/api/admin/claim/${id}`, { method: 'POST' });
+            if(res.ok) loadReservations();
+            else alert("오류가 발생했습니다.");
+        }
+
+        async function bulkClaimSelected() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+            if(!confirm(`선택된 ${ids.length}매의 티켓을 일괄 발권 처리하시겠습니까?`)) return;
+
+            const res = await fetch('/api/admin/claim/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reservation_ids: ids })
+            });
+
+            if(res.ok) {
+                alert("일괄 발권이 완료되었습니다.");
+                loadReservations();
+            } else {
+                alert("오류가 발생했습니다.");
+            }
+        }
+
+        async function bulkCancelSelected() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+            if(!confirm(`⚠️ 선택된 ${ids.length}매의 예매 내역을 강제로 파기(취소)하시겠습니까?\n이 작업은 되돌릴 수 없으며, 묶여있던 모든 좌석이 즉시 빈자리로 대방출됩니다.`)) return;
+
+            const res = await fetch('/api/admin/cancel/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reservation_ids: ids })
+            });
+
+            if(res.ok) {
+                alert("성공적으로 예매가 취소되었습니다.");
+                loadReservations();
+            } else {
+                alert("취소 처리 중 오류가 발생했습니다.");
+            }
+        }
+
+        // ==========================================
+        // Visual Edit Modal Logic
+        // ==========================================
+        let adminSelectedSeats = [];
+        let adminTargetCount = 0;
+        let adminSeatsData = [];
+
+        function openEditModal() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+            
+            adminTargetCount = ids.length;
+            document.getElementById('edit-summary').innerText = `총 ${adminTargetCount}석의 예매 내역을 우측 좌석표에서 다른 자리로 클릭하여 이동시킬 수 있습니다.`;
+            document.getElementById('edit-target-count').innerText = adminTargetCount;
+            
+            // Wait for dropdown to be drawn, then fetch seats automatically
+            adminSelectedSeats = [];
+            fetchAdminSeats();
+
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+        }
+
+        async function fetchAdminSeats() {
+            const sId = document.getElementById('edit-session').value;
+            if (!sId) return;
+
+            document.getElementById('admin-seat-map').innerHTML = '<div style="text-align:center;color:#64748b;padding:2rem;">회차 로딩중...</div>';
+
+            try {
+                const res = await fetch('/api/seats?session_id=' + sId);
+                adminSeatsData = await res.json();
+                adminSelectedSeats = []; 
+                updateAdminSelectionUI();
+                renderAdminSeatMap();
+            } catch(e) { console.error(e); }
+        }
+
+        function renderAdminSeatMap() {
+            const container = document.getElementById('admin-seat-map');
+            container.innerHTML = '';
+            
+            const rows = ['A','B','C','D','E','F','G','H'];
+            rows.forEach(r => {
+                const rowData = adminSeatsData.filter(s => s.row === r).sort((a,b) => a.number - b.number);
+                if (rowData.length === 0) return;
+                
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'seat-row';
+                // Inline styles to match booking row perfectly
+                rowDiv.style.display = 'flex';
+                rowDiv.style.justifyContent = 'center';
+                rowDiv.style.gap = '0.5rem';
+
+                rowDiv.innerHTML = `<div class="row-label">${r}</div>`;
+                
+                rowData.forEach(s => {
+                    const btn = document.createElement('div');
+                    const isSelected = adminSelectedSeats.some(sel => sel.id === s.id);
+                    btn.className = `seat ${s.status === 'reserved' ? 'reserved' : 'available'} ${isSelected ? 'selected' : ''}`;
+                    btn.innerText = s.number;
+                    
+                    if (s.status === 'available' || isSelected) {
+                        btn.onclick = () => toggleAdminSeat(s);
+                    }
+                    rowDiv.appendChild(btn);
+                });
+                container.appendChild(rowDiv);
+            });
+        }
+
+        function toggleAdminSeat(seatObj) {
+            const idx = adminSelectedSeats.findIndex(s => s.id === seatObj.id);
+            if(idx !== -1) {
+                adminSelectedSeats.splice(idx, 1);
+            } else {
+                if(adminSelectedSeats.length >= adminTargetCount) {
+                    alert(`최대 ${adminTargetCount}석까지만 선택 가능합니다.`);
+                    return;
+                }
+                adminSelectedSeats.push(seatObj);
+            }
+            updateAdminSelectionUI();
+            renderAdminSeatMap();
+        }
+
+        function updateAdminSelectionUI() {
+            document.getElementById('edit-selected-count').innerText = adminSelectedSeats.length;
+            const list = document.getElementById('edit-selected-list');
+            list.innerHTML = adminSelectedSeats.map(s => 
+                `<span style="background:var(--primary); color:white; padding:0.2rem 0.5rem; border-radius:6px; font-size:0.85rem; font-weight:600;">${s.row}-${s.number}</span>`
+            ).join('');
+            
+            const btn = document.getElementById('edit-btn');
+            if (adminSelectedSeats.length === adminTargetCount) {
+                btn.disabled = false;
+                btn.innerText = "선택한 " + adminTargetCount + "매 수정 적용";
+            } else {
+                btn.disabled = true;
+                btn.innerText = "좌석을 모두 골라주세요";
+            }
+        }
+
+        document.getElementById('edit-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const ids = getSelectedIds();
+            const newSessionId = parseInt(document.getElementById('edit-session').value);
+
+            // Strip the "1_" from "1_A-1" to get pure seat IDs for the backend req.new_seat_ids parameter
+            const newSeatsList = adminSelectedSeats.map(s => s.id.includes('_') ? s.id.split('_')[1] : s.id);
+
+            const btn = document.getElementById('edit-btn');
+            btn.disabled = true;
+            btn.innerText = '수정중...';
+
+            try {
+                const res = await fetch('/api/admin/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reservation_ids: ids,
+                        new_session_id: newSessionId,
+                        new_seat_ids: newSeatsList
+                    })
+                });
+
+                if (res.ok) {
+                    alert("예매 수정이 즉시 반영되었습니다.");
+                    closeEditModal();
+                    loadReservations();
+                } else {
+                    const err = await res.json();
+                    alert("수정 실패: " + err.detail);
+                }
+            } catch (err) {
+                alert("네트워크 오류 발생");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '수정 완료';
+            }
+        }
+
+        document.getElementById('refresh-btn').addEventListener('click', loadReservations);
+        loadReservations();
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+.env
+*.db
+flask-version-deploy.zip
+.DS_Store
+.venv/
+venv/
