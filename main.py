@@ -1,4 +1,6 @@
 from flask import Flask, render_template, request, jsonify, g, make_response
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import secrets
 import hashlib
 import os
@@ -40,6 +42,7 @@ if existing_seats == 0:
 db.close()
 
 app = Flask(__name__)
+limiter = Limiter(get_remote_address, app=app, default_limits=[])
 
 # --- Database Session Management ---
 @app.before_request
@@ -58,6 +61,8 @@ def authenticate_admin():
     if not auth or not auth.username or not auth.password:
         return False
     admin_pw = os.environ.get('ADMIN_PASSWORD', '')
+    if not admin_pw:
+        return False
     correct_username = secrets.compare_digest(auth.username, "admin")
     correct_password = secrets.compare_digest(auth.password, admin_pw)
     return correct_username and correct_password
@@ -90,19 +95,30 @@ def get_sessions():
 
 @app.route("/api/seats", methods=["GET"])
 def get_seats():
-    session_id = int(request.args.get('session_id'))
+    try:
+        session_id = int(request.args.get('session_id', ''))
+    except (ValueError, TypeError):
+        return jsonify({"detail": "유효한 session_id를 입력해주세요."}), 400
     seats = g.db.query(models.Seat).filter(models.Seat.session_id == session_id).all()
     return jsonify([{"id": s.id, "session_id": s.session_id, "row": s.row, "number": s.number, "status": s.status} for s in seats])
 
 @app.route("/api/reserve", methods=["POST"])
 def reserve_seat():
-    data = request.json
+    data = request.json or {}
     seat_ids = data.get("seat_ids", [])
     phone = data.get("phone", "").strip()
-    
+    user_name = data.get("user_name", "").strip()
+    password = data.get("password", "")
+    session_id = data.get("session_id")
+
+    if not user_name or len(user_name) > 50:
+        return jsonify({"detail": "이름을 입력해주세요."}), 400
     if not phone.isdigit() or len(phone) < 10:
         return jsonify({"detail": "연락처는 하이픈(-) 없이 10자리 이상의 숫자만 입력해주세요."}), 400
-        
+    if not password:
+        return jsonify({"detail": "비밀번호를 입력해주세요."}), 400
+    if session_id is None:
+        return jsonify({"detail": "회차를 선택해주세요."}), 400
     if not seat_ids:
         return jsonify({"detail": "선택된 좌석이 없습니다."}), 400
     if len(seat_ids) > 4:
@@ -132,12 +148,18 @@ def reserve_seat():
     return jsonify({"status": "success"})
 
 @app.route("/api/my_reservations", methods=["POST"])
+@limiter.limit("20 per minute")
 def get_my_reservations():
-    data = request.json
+    data = request.json or {}
+    user_name = data.get("user_name", "").strip()
+    phone = data.get("phone", "").strip()
+    password = data.get("password", "")
+    if not user_name or not phone or not password:
+        return jsonify({"detail": "모든 항목을 입력해주세요."}), 400
     reservations = g.db.query(models.Reservation).filter(
-        models.Reservation.user_name == data["user_name"],
-        models.Reservation.phone == data["phone"],
-        models.Reservation.password == hash_password(data["password"])
+        models.Reservation.user_name == user_name,
+        models.Reservation.phone == phone,
+        models.Reservation.password == hash_password(password)
     ).all()
     return jsonify([{
         "id": r.id, "session_id": r.session_id, "seat_id": r.seat_id,
@@ -145,15 +167,21 @@ def get_my_reservations():
     } for r in reservations])
 
 @app.route("/api/cancel/<seat_id>", methods=["POST"])
+@limiter.limit("20 per minute")
 def cancel_reservation(seat_id):
-    data = request.json
+    data = request.json or {}
+    user_name = data.get("user_name", "").strip()
+    phone = data.get("phone", "").strip()
+    password = data.get("password", "")
+    if not user_name or not phone or not password:
+        return jsonify({"detail": "모든 항목을 입력해주세요."}), 400
     reservation = g.db.query(models.Reservation).filter(
         models.Reservation.seat_id == seat_id,
-        models.Reservation.user_name == data["user_name"],
-        models.Reservation.phone == data["phone"],
-        models.Reservation.password == hash_password(data["password"])
+        models.Reservation.user_name == user_name,
+        models.Reservation.phone == phone,
+        models.Reservation.password == hash_password(password)
     ).first()
-    
+
     if not reservation:
         return jsonify({"detail": "권한이 없거나 예매 내역을 찾을 수 없습니다."}), 404
         
