@@ -1043,6 +1043,30 @@ body {
     letter-spacing: 0.01em;
 }
 
+.session-btn-avail {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #4ade80;
+    margin-top: 0.4rem;
+}
+
+.session-btn-avail.avail-full {
+    color: #f87171;
+}
+
+.session-btn-full {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.session-btn-full:hover {
+    transform: none;
+    box-shadow: none;
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
 /* =====================================================
    TOAST NOTIFICATIONS
    ===================================================== */

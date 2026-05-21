@@ -269,12 +269,14 @@ async function loadSessions() {
         const response = await fetch('/api/sessions');
         const sessions = await response.json();
         const container = document.getElementById('session-buttons-container');
-        container.innerHTML = sessions.map(s =>
-            `<button class="btn session-btn" onclick="selectSession(${s.id}, '${s.name}')">
+        container.innerHTML = sessions.map(s => {
+            const full = s.available === 0;
+            return `<button class="btn session-btn${full ? ' session-btn-full' : ''}" onclick="selectSession(${s.id}, '${s.name}')" ${full ? 'disabled' : ''}>
                 <span class="session-btn-name">${s.name}</span>
-                ${s.subtitle ? `<span class="session-btn-sub">${s.subtitle}</span>` : ''}
-            </button>`
-        ).join('');
+                <span class="session-btn-sub">${s.subtitle || ''}</span>
+                <span class="session-btn-avail${full ? ' avail-full' : ''}">${full ? '매진' : `잔여 ${s.available}석`}</span>
+            </button>`;
+        }).join('');
     } catch (e) { console.error('Failed to load sessions', e); }
 }
 

@@ -91,7 +91,17 @@ def admin():
 
 @app.route("/api/sessions", methods=["GET"])
 def get_sessions():
-    return jsonify(SESSIONS)
+    result = []
+    for s in SESSIONS:
+        available = g.db.query(models.Seat).filter(
+            models.Seat.session_id == s['id'],
+            models.Seat.status == 'available'
+        ).count()
+        total = g.db.query(models.Seat).filter(
+            models.Seat.session_id == s['id']
+        ).count()
+        result.append({**s, 'available': available, 'total': total})
+    return jsonify(result)
 
 @app.route("/api/seats", methods=["GET"])
 def get_seats():
