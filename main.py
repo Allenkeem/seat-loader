@@ -26,12 +26,17 @@ SESSIONS = [
 ]
 
 # Seat Generation on Startup (bypasses ASGI/WSGI startup event lifecycle)
+VALID_ROWS = ["A", "B", "C", "D", "E", "F", "G"]
 db = database.SessionLocal()
+
+# Remove any seats outside valid rows (e.g. H row latecomer seats)
+db.query(models.Seat).filter(models.Seat.row.notin_(VALID_ROWS)).delete(synchronize_session=False)
+db.commit()
+
 existing_seats = db.query(models.Seat).count()
 if existing_seats == 0:
-    rows = ["A", "B", "C", "D", "E", "F", "G"]
     for s in SESSIONS:
-        for row in rows:
+        for row in VALID_ROWS:
             for num in range(1, 13):
                 if row == "A" and num in [1, 2, 3]:
                     continue
