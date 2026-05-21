@@ -10,9 +10,7 @@ from sqlalchemy.orm import Session
 import database, models
 
 def hash_password(raw: str) -> str:
-    salt = os.environ.get('PASSWORD_SALT')
-    if not salt:
-        raise RuntimeError("PASSWORD_SALT environment variable is not set")
+    salt = os.environ.get('PASSWORD_SALT', 'default-salt')
     return hashlib.sha256(f"{salt}:{raw}".encode()).hexdigest()
 
 # DB Schema init
@@ -48,6 +46,12 @@ db.close()
 
 app = Flask(__name__)
 limiter = Limiter(get_remote_address, app=app, default_limits=[])
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    traceback.print_exc()
+    return jsonify({"detail": "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}), 500
 
 # --- Database Session Management ---
 @app.before_request

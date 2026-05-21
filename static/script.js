@@ -227,14 +227,18 @@ const btn = document.getElementById('submit-btn');
             updateMobileBookingBar();
             fetchSeats();
         } else {
-            const error = await res.json();
-            showToast(`예매 실패: ${error.detail}`, 'error');
+            let detail = '다시 시도해주세요.';
+            try {
+                const error = await res.json();
+                detail = error.detail || detail;
+            } catch (_) {}
+            showToast(`예매 실패: ${detail}`, 'error');
             fetchSeats();
         }
     } catch (err) {
-        showToast('네트워크 오류가 발생했습니다.', 'error');
+        showToast('네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', 'error');
     } finally {
-        if (selectedSeats.length > 0) btn.disabled = false;
+        btn.disabled = selectedSeats.length === 0;
         btn.innerText = '예매 확정';
     }
 };
@@ -316,6 +320,9 @@ function switchView(viewId) {
         }
 
         if (viewId !== 'view-booking') {
+            selectedSeats = [];
+            document.getElementById('reservation-form').reset();
+            updateSidebar();
             const bar = document.getElementById('mobile-booking-bar');
             if (bar) bar.classList.remove('visible');
         }
