@@ -19,10 +19,10 @@ def hash_password(raw: str) -> str:
 models.Base.metadata.create_all(bind=database.engine)
 
 SESSIONS = [
-    {"id": 1, "name": "5월 29일 (금) 16:30 공연", "subtitle": "종료 약 18:00"},
-    {"id": 2, "name": "5월 29일 (금) 20:00 공연", "subtitle": "종료 약 21:30"},
-    {"id": 3, "name": "5월 30일 (토) 15:00 공연", "subtitle": "종료 약 16:30"},
-    {"id": 4, "name": "5월 30일 (토) 19:00 공연", "subtitle": "종료 약 20:30"}
+    {"id": 1, "name": "5월 29일 (금) 16:30 공연", "subtitle": "종료 약 18:10"},
+    {"id": 2, "name": "5월 29일 (금) 20:00 공연", "subtitle": "종료 약 21:40"},
+    {"id": 3, "name": "5월 30일 (토) 15:00 공연", "subtitle": "종료 약 16:40"},
+    {"id": 4, "name": "5월 30일 (토) 19:00 공연", "subtitle": "종료 약 20:40"}
 ]
 
 # Seat Generation on Startup (bypasses ASGI/WSGI startup event lifecycle)
