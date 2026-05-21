@@ -26,6 +26,37 @@
             border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; 
             font-size: 1rem; font-family: inherit; margin-bottom: 1.5rem;
         }
+        .status-filter {
+            display: flex; gap: 0.5rem; padding: 0.75rem 1rem 0;
+        }
+        .status-btn {
+            padding: 0.35rem 1rem; border-radius: 20px;
+            border: 1px solid #334155; background: transparent;
+            color: #94a3b8; cursor: pointer; font-size: 0.88rem;
+            font-family: inherit; transition: all 0.15s;
+        }
+        .status-btn:hover { border-color: #64748b; color: #cbd5e1; }
+        .status-btn.active[data-status="pending"]  { background: #f59e0b; color: #fff; border-color: #f59e0b; }
+        .status-btn.active[data-status="claimed"]  { background: #22c55e; color: #fff; border-color: #22c55e; }
+        .status-btn.active[data-status="all"]      { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+        .status-count {
+            display: inline-block; background: rgba(255,255,255,0.25);
+            border-radius: 10px; padding: 0 0.4rem;
+            font-size: 0.78rem; margin-left: 0.3rem; font-weight: 700;
+        }
+        .status-btn:not(.active) .status-count { background: #1e293b; color: #94a3b8; }
+
+        /* Big checkboxes for fast ticket claiming */
+        .reservation-table input[type="checkbox"] {
+            width: 1.5rem; height: 1.5rem;
+            cursor: pointer; accent-color: #6366f1;
+            vertical-align: middle;
+        }
+        .reservation-table td:first-child,
+        .reservation-table th:first-child {
+            text-align: center; padding: 0.5rem 0.75rem;
+        }
+
         /* Override seat map styles for light mode admin */
         .admin-modal-content .row-label { color: #475569 !important; font-weight: bold; width: 1.5rem; text-align: center; margin-right: 0.5rem; display: flex; align-items: center; justify-content: center; }
         .admin-modal-content .stage { color: #cbd5e1; border: 2px solid #e2e8f0; background: #f8fafc; text-align: center; padding: 0.8rem; border-radius: 8px; margin-bottom: 2rem; font-weight: 700; letter-spacing: 0.5rem; }
@@ -45,6 +76,13 @@
             <li class="tab active" data-tab="all" onclick="filterSession('all')">전체보기</li>
             <!-- Dynamically populated -->
         </ul>
+
+        <!-- Status Filter -->
+        <div class="status-filter">
+            <button class="status-btn active" data-status="pending" onclick="filterStatus('pending')">미발권 <span class="status-count" id="count-pending">0</span></button>
+            <button class="status-btn" data-status="claimed" onclick="filterStatus('claimed')">발권완료 <span class="status-count" id="count-claimed">0</span></button>
+            <button class="status-btn" data-status="all" onclick="filterStatus('all')">전체 <span class="status-count" id="count-all">0</span></button>
+        </div>
 
         <!-- Action Bar -->
         <div class="action-bar" id="action-bar">
@@ -125,6 +163,7 @@
         let sessionMap = {};
         let reservationsData = [];
         let currentTab = 'all';
+        let currentStatus = 'pending';
 
         async function fetchSessions() {
             try {
@@ -156,15 +195,33 @@
             renderTable();
         }
 
+        function filterStatus(status) {
+            currentStatus = status;
+            document.querySelectorAll('.status-btn').forEach(b => b.classList.toggle('active', b.dataset.status === status));
+            renderTable();
+        }
+
+        function updateStatusCounts(base) {
+            document.getElementById('count-pending').textContent = base.filter(r => !r.claimed).length;
+            document.getElementById('count-claimed').textContent = base.filter(r => r.claimed).length;
+            document.getElementById('count-all').textContent = base.length;
+        }
+
         function renderTable() {
             const tbody = document.getElementById('reservation-list');
             tbody.innerHTML = '';
             document.getElementById('selectAll').checked = false;
-            updateActionBar(); 
-            
+            updateActionBar();
+
             let filtered = reservationsData;
             if (currentTab !== 'all') {
                 filtered = reservationsData.filter(r => r.session_id == currentTab);
+            }
+
+            updateStatusCounts(filtered);
+
+            if (currentStatus !== 'all') {
+                filtered = filtered.filter(r => currentStatus === 'pending' ? !r.claimed : r.claimed);
             }
             
             filtered.forEach(r => {
