@@ -5,6 +5,12 @@ let selectedSeats = [];
 const MAX_SEATS = 4;
 let currentSessionId = null;
 let currentSessionName = "";
+let sessionsData = [];
+
+let changeSeatContext = null; // { seat_ids: [], session_id, user_name, phone, password }
+let changePairs = [];         // [{ fromId, toId }]
+let changeSeatSelected = null; // seat_id currently being assigned a destination
+let lookupReservations = [];  // cached from last lookup
 
 // =====================================================
 // TOAST NOTIFICATION SYSTEM
@@ -293,6 +299,7 @@ async function loadSessions() {
     try {
         const response = await fetch('/api/sessions');
         const sessions = await response.json();
+        sessionsData = sessions;
         const container = document.getElementById('session-buttons-container');
         container.innerHTML = sessions.map(s => {
             const full = s.available === 0;
@@ -338,6 +345,7 @@ function switchView(viewId) {
             document.getElementById('lookup-form').reset();
             document.getElementById('lookup-results').style.display = 'none';
             document.getElementById('my-reservations-list').innerHTML = '';
+            lookupReservations = [];
         }
 
         if (viewId !== 'view-booking') {
@@ -382,23 +390,51 @@ document.getElementById('lookup-form').onsubmit = async (e) => {
 
         if (res.ok) {
             const data = await res.json();
+            lookupReservations = data;
             const list = document.getElementById('my-reservations-list');
             list.innerHTML = '';
 
             if (data.length === 0) {
                 list.innerHTML = '<li style="color: var(--text-muted); font-size: 0.9rem;">예매 내역이 없습니다. (정보를 다시 확인해주세요)</li>';
             } else {
+                const lookupUserName = userName;
+                const lookupPhone = phone;
+                const lookupPassword = password;
+
+                // Group by session_id
+                const bySession = {};
                 data.forEach(r => {
+                    if (!bySession[r.session_id]) bySession[r.session_id] = [];
+                    bySession[r.session_id].push(r);
+                });
+
+                Object.entries(bySession).forEach(([sidStr, reservations]) => {
+                    const sid = parseInt(sidStr);
+                    const sessionName = sessionsData.find(s => s.id === sid)?.name || `${sid}회차`;
+                    const anyUnclaimed = reservations.some(r => !r.claimed);
+                    const seatLabels = reservations
+                        .map(r => r.seat_id.includes('_') ? r.seat_id.split('_')[1] : r.seat_id)
+                        .join(', ');
+                    const claimedAll = reservations.every(r => r.claimed);
+                    const claimedSome = !claimedAll && reservations.some(r => r.claimed);
+                    const statusText = claimedAll
+                        ? '<span style="color:#10b981">발권됨</span>'
+                        : claimedSome ? '일부 발권됨' : '발권 대기중';
+
                     const li = document.createElement('li');
                     li.className = 'reservation-item';
-                    const displaySeat = r.seat_id.includes('_') ? r.seat_id.split('_')[1] : r.seat_id;
                     li.innerHTML = `
                         <div>
-                            <span style="font-size: 0.8rem; color: #94a3b8; margin-right: 4px;">${r.session_id}회차</span>
-                            <span class="reservation-seat">${displaySeat}</span> 좌석
-                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">상태: ${r.claimed ? '<span style="color:#10b981">발권됨</span>' : '발권 대기중'}</div>
+                            <span style="font-size: 0.78rem; color: #94a3b8;">${sessionName}</span>
+                            <div style="margin-top: 2px;"><span class="reservation-seat">${seatLabels}</span> 좌석</div>
+                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">상태: ${statusText}</div>
                         </div>
-                        <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #ef4444; color: white; border: none; flex-shrink: 0;" onclick="cancelSeat('${r.seat_id}')">취소</button>
+                        <div style="display:flex; gap:0.4rem; flex-shrink:0;">
+                            ${anyUnclaimed ? `<button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="enterSeatChange(${sid}, '${lookupUserName}', '${lookupPhone}', '${lookupPassword}')">변경</button>` : ''}
+                            ${reservations.map(r =>
+                                `<button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #ef4444; color: white; border: none;" onclick="cancelSeat('${r.seat_id}')">${reservations.length > 1 ? (r.seat_id.includes('_') ? r.seat_id.split('_')[1] : r.seat_id) + ' 취소' : '취소'}</button>`
+                            ).join('')}
+                        </div>
                     `;
                     list.appendChild(li);
                 });
@@ -414,6 +450,192 @@ document.getElementById('lookup-form').onsubmit = async (e) => {
         btn.innerText = '조회하기';
     }
 };
+
+// =====================================================
+// SEAT CHANGE FLOW
+// =====================================================
+function enterSeatChange(sessionId, userName, phone, password) {
+    const sessionReservations = lookupReservations.filter(
+        r => r.session_id === sessionId && !r.claimed
+    );
+    if (!sessionReservations.length) return;
+
+    changeSeatContext = {
+        seat_ids: sessionReservations.map(r => r.seat_id),
+        session_id: sessionId,
+        user_name: userName,
+        phone,
+        password
+    };
+    changePairs = [];
+    changeSeatSelected = null;
+
+    loadChangeSeatMap(sessionId);
+    switchView('view-change-seat');
+}
+
+async function loadChangeSeatMap(sessionId) {
+    const map = document.getElementById('change-seat-map');
+    map.innerHTML = '<div class="seat-map-loading">좌석 정보를 불러오는 중...</div>';
+    try {
+        const res = await fetch(`/api/seats?session_id=${sessionId}`);
+        const seats = await res.json();
+        changeSeatMapCache = seats;
+        renderChangeSeatMap(seats);
+    } catch (e) {
+        showToast('좌석 정보를 불러오지 못했습니다.', 'error');
+    }
+}
+
+function renderChangeSeatMap(seats) {
+    const currentIds = changeSeatContext.seat_ids;
+    const pairsByFrom = {}, pairsByTo = {};
+    changePairs.forEach(p => { pairsByFrom[p.fromId] = p.toId; pairsByTo[p.toId] = p.fromId; });
+
+    const map = document.getElementById('change-seat-map');
+    map.innerHTML = '';
+
+    const VALID_ROWS = ['A','B','C','D','E','F','G'];
+    VALID_ROWS.forEach(row => {
+        if (row === 'E') {
+            const fence = document.createElement('div');
+            fence.className = 'seat-fence';
+            fence.textContent = '— 펜스 —';
+            map.appendChild(fence);
+        }
+        const label = document.createElement('div');
+        label.className = 'row-label';
+        label.textContent = row;
+        map.appendChild(label);
+
+        for (let num = 1; num <= 12; num++) {
+            const seatData = seats.find(s => s.row === row && s.number === num);
+            const div = document.createElement('div');
+
+            if (!seatData) {
+                div.className = 'seat empty';
+            } else if (currentIds.includes(seatData.id)) {
+                const isMoving = seatData.id === changeSeatSelected;
+                const isMapped = !!pairsByFrom[seatData.id];
+                div.className = `seat ${isMoving ? 'current-moving' : isMapped ? 'current-mapped' : 'current-own'}`;
+                div.textContent = num;
+                div.onclick = () => {
+                    if (changeSeatSelected === seatData.id) {
+                        changeSeatSelected = null;
+                    } else {
+                        changePairs = changePairs.filter(p => p.fromId !== seatData.id);
+                        changeSeatSelected = seatData.id;
+                    }
+                    renderChangeSeatMap(changeSeatMapCache);
+                };
+            } else if (pairsByTo[seatData.id]) {
+                div.className = 'seat selected';
+                div.textContent = num;
+                div.onclick = () => {
+                    changePairs = changePairs.filter(p => p.toId !== seatData.id);
+                    renderChangeSeatMap(changeSeatMapCache);
+                };
+            } else if (seatData.status === 'reserved') {
+                div.className = 'seat reserved';
+                div.textContent = num;
+            } else {
+                div.className = 'seat available';
+                div.textContent = num;
+                div.onclick = () => {
+                    if (!changeSeatSelected) {
+                        showToast('먼저 파란 좌석을 눌러 이동할 좌석을 선택하세요.', 'info');
+                        return;
+                    }
+                    changePairs = changePairs.filter(p => p.fromId !== changeSeatSelected);
+                    changePairs.push({ fromId: changeSeatSelected, toId: seatData.id });
+                    changeSeatSelected = null;
+                    renderChangeSeatMap(changeSeatMapCache);
+                };
+            }
+            map.appendChild(div);
+        }
+    });
+
+    updateChangeSeatUI();
+    initChangeSeatScrollHint();
+}
+
+let changeSeatMapCache = [];
+
+function updateChangeSeatUI() {
+    const statusEl = document.getElementById('change-seat-status');
+    const btn = document.getElementById('change-seat-confirm-btn');
+
+    if (changeSeatSelected) {
+        const label = changeSeatSelected.includes('_') ? changeSeatSelected.split('_')[1] : changeSeatSelected;
+        statusEl.innerHTML = `<strong style="color:#fbbf24">${label}</strong> → 이동할 자리를 선택하세요`;
+    } else if (changePairs.length === 0) {
+        statusEl.textContent = '파란 좌석을 눌러 이동할 좌석을 선택하세요';
+    } else {
+        statusEl.innerHTML = changePairs.map(p => {
+            const from = p.fromId.includes('_') ? p.fromId.split('_')[1] : p.fromId;
+            const to = p.toId.includes('_') ? p.toId.split('_')[1] : p.toId;
+            return `<span style="color:#94a3b8">${from}</span> → <strong style="color:var(--primary)">${to}</strong>`;
+        }).join(' &nbsp;|&nbsp; ');
+    }
+
+    btn.disabled = changePairs.length === 0 || changeSeatSelected !== null;
+}
+
+function adjustChangeSeatStage() {
+    const map = document.getElementById('change-seat-map');
+    const stage = document.querySelector('#view-change-seat .stage');
+    if (!map || !stage || map.children.length < 13) return;
+    const first = map.children[1].getBoundingClientRect();
+    const last  = map.children[12].getBoundingClientRect();
+    stage.style.alignSelf = 'flex-start';
+    stage.style.width = (last.right - first.left) + 'px';
+}
+
+function initChangeSeatScrollHint() {
+    const container = document.getElementById('change-seat-map-container');
+    if (!container) return;
+    const hasOverflow = container.scrollWidth > container.clientWidth + 4;
+    const hint = document.getElementById('seat-scroll-label');
+    if (hint) hint.style.display = hasOverflow ? 'flex' : 'none';
+}
+
+async function confirmSeatChange() {
+    if (!changeSeatContext || changePairs.length === 0) return;
+    const btn = document.getElementById('change-seat-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = '변경 중...';
+
+    try {
+        const res = await fetch('/api/change-seats-bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                old_seat_ids: changePairs.map(p => p.fromId),
+                new_seat_ids: changePairs.map(p => p.toId),
+                user_name: changeSeatContext.user_name,
+                phone: changeSeatContext.phone,
+                password: changeSeatContext.password
+            })
+        });
+        if (res.ok) {
+            showToast('좌석이 변경되었습니다.', 'success');
+            changeSeatContext = null;
+            changePairs = [];
+            changeSeatSelected = null;
+            switchView('view-lookup');
+        } else {
+            const err = await res.json();
+            showToast(err.detail || '변경에 실패했습니다.', 'error');
+            btn.disabled = false;
+            btn.textContent = '변경 확정';
+        }
+    } catch (e) {
+        showToast('네트워크 오류가 발생했습니다.', 'error');
+        btn.disabled = false;
+        btn.textContent = '변경 확정';
+    }
+}
 
 async function cancelSeat(seatId) {
     if (!confirm(`정말 ${seatId} 좌석 예매를 취소하시겠습니까?`)) return;

@@ -212,6 +212,114 @@ def cancel_reservation(seat_id):
     g.db.commit()
     return jsonify({"status": "success"})
 
+@app.route("/api/change-seat/<old_seat_id>", methods=["POST"])
+@limiter.limit("10 per minute")
+def change_seat(old_seat_id):
+    data = request.json or {}
+    user_name = data.get("user_name", "").strip()
+    phone = data.get("phone", "").strip()
+    password = data.get("password", "")
+    new_seat_id = data.get("new_seat_id", "")
+
+    if not user_name or not phone or not password or not new_seat_id:
+        return jsonify({"detail": "모든 항목을 입력해주세요."}), 400
+
+    reservation = g.db.query(models.Reservation).filter(
+        models.Reservation.seat_id == old_seat_id,
+        models.Reservation.user_name == user_name,
+        models.Reservation.phone == phone,
+        models.Reservation.password == hash_password(password)
+    ).first()
+
+    if not reservation:
+        return jsonify({"detail": "권한이 없거나 예매 내역을 찾을 수 없습니다."}), 404
+
+    new_seat = g.db.query(models.Seat).filter(
+        models.Seat.id == new_seat_id,
+        models.Seat.session_id == reservation.session_id
+    ).with_for_update().first()
+
+    if not new_seat:
+        return jsonify({"detail": "존재하지 않는 좌석입니다."}), 404
+    if new_seat.status != "available":
+        return jsonify({"detail": "이미 예매된 좌석입니다. 다른 좌석을 선택해주세요."}), 409
+
+    old_seat = g.db.query(models.Seat).filter(
+        models.Seat.id == old_seat_id
+    ).with_for_update().first()
+
+    old_seat.status = "available"
+    new_seat.status = "reserved"
+    reservation.seat_id = new_seat_id
+
+    g.db.commit()
+    return jsonify({"status": "success", "new_seat_id": new_seat_id})
+
+@app.route("/api/change-seats-bulk", methods=["POST"])
+@limiter.limit("10 per minute")
+def change_seats_bulk():
+    data = request.json or {}
+    user_name = data.get("user_name", "").strip()
+    phone = data.get("phone", "").strip()
+    password = data.get("password", "")
+    old_seat_ids = data.get("old_seat_ids", [])
+    new_seat_ids = data.get("new_seat_ids", [])
+
+    if not user_name or not phone or not password:
+        return jsonify({"detail": "모든 항목을 입력해주세요."}), 400
+    if not old_seat_ids or not new_seat_ids:
+        return jsonify({"detail": "좌석 정보가 없습니다."}), 400
+    if len(old_seat_ids) != len(new_seat_ids):
+        return jsonify({"detail": "이전 좌석과 새 좌석의 수가 일치하지 않습니다."}), 400
+
+    hashed_pw = hash_password(password)
+
+    reservations = g.db.query(models.Reservation).filter(
+        models.Reservation.seat_id.in_(old_seat_ids),
+        models.Reservation.user_name == user_name,
+        models.Reservation.phone == phone,
+        models.Reservation.password == hashed_pw
+    ).all()
+
+    if len(reservations) != len(old_seat_ids):
+        return jsonify({"detail": "권한이 없거나 예매 내역을 찾을 수 없습니다."}), 404
+
+    session_ids = set(r.session_id for r in reservations)
+    if len(session_ids) != 1:
+        return jsonify({"detail": "같은 회차의 좌석만 변경할 수 있습니다."}), 400
+    session_id = session_ids.pop()
+
+    new_seats = g.db.query(models.Seat).filter(
+        models.Seat.id.in_(new_seat_ids),
+        models.Seat.session_id == session_id
+    ).with_for_update().all()
+
+    if len(new_seats) != len(new_seat_ids):
+        return jsonify({"detail": "일부 새 좌석을 찾을 수 없습니다."}), 404
+
+    for seat in new_seats:
+        if seat.status != "available" and seat.id not in old_seat_ids:
+            return jsonify({"detail": f"{seat.id} 좌석은 이미 예매되어 있습니다."}), 409
+
+    old_seats = g.db.query(models.Seat).filter(
+        models.Seat.id.in_(old_seat_ids)
+    ).with_for_update().all()
+
+    for seat in old_seats:
+        if seat.id not in new_seat_ids:
+            seat.status = "available"
+
+    for seat in new_seats:
+        if seat.id not in old_seat_ids:
+            seat.status = "reserved"
+
+    res_by_old = {r.seat_id: r for r in reservations}
+    for old_id, new_id in zip(old_seat_ids, new_seat_ids):
+        res_by_old[old_id].seat_id = new_id
+
+    g.db.commit()
+    return jsonify({"status": "success"})
+
 @app.route("/api/admin/reservations", methods=["GET"])
 @requires_auth
 def get_admin_reservations():
