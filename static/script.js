@@ -95,6 +95,7 @@ function renderSeatMap() {
 
     adjustStageWidth();
     updateSidebar();
+    initSeatMapScrollHint();
 }
 
 function adjustStageWidth() {
@@ -244,6 +245,26 @@ const btn = document.getElementById('submit-btn');
 };
 
 window.addEventListener('resize', adjustStageWidth);
+
+// =====================================================
+// SEAT MAP HORIZONTAL SCROLL FADE HINT
+// =====================================================
+function initSeatMapScrollHint() {
+    const container = document.getElementById('seat-map-container');
+    if (!container) return;
+
+    const hasOverflow = container.scrollWidth > container.clientWidth + 4;
+    const hint = document.getElementById('seat-scroll-label');
+    if (!hint) return;
+
+    if (!hasOverflow) { hint.style.display = 'none'; return; }
+
+    hint.style.display = 'flex';
+    container.addEventListener('scroll', () => {
+        const atEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - 8;
+        hint.style.opacity = atEnd ? '0' : '1';
+    }, { passive: true });
+}
 
 // =====================================================
 // SCROLL HINT (view-info)
