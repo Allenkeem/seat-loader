@@ -270,6 +270,42 @@
         </main>
     </div>
 
+    <!-- [SCREEN 4] SEAT CHANGE FLOW -->
+    <div id="view-change-seat" class="view-section">
+        <header class="sub-header">
+            <button class="btn-back" onclick="switchView('view-lookup')">← 뒤로가기</button>
+            <h2 style="color: #f8fafc; font-size: 1.5rem;">좌석 변경</h2>
+        </header>
+        <main class="container">
+            <div class="change-seat-notice">
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style="flex-shrink:0;"><path d="M7.5 1.5a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM7.5 4.5v4M7.5 10h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                다른 회차로 변경하려면 취소 후 다시 예매해주세요.
+            </div>
+            <div class="change-seat-info">
+                <span id="change-seat-status" style="font-size: 0.9rem;">파란 좌석을 눌러 이동할 좌석을 선택하세요</span>
+            </div>
+            <div class="left-panel" style="margin-top: 1rem;">
+                <div class="stage">STAGE</div>
+                <div class="seat-map-wrapper" id="change-seat-map-wrapper">
+                    <div class="seat-map-container" id="change-seat-map-container">
+                        <div id="change-seat-map" class="seat-map"></div>
+                    </div>
+                </div>
+                <div class="legend">
+                    <div class="legend-item"><div class="seat available"></div><span>예매 가능</span></div>
+                    <div class="legend-item"><div class="seat current-own"></div><span>현재 내 좌석</span></div>
+                    <div class="legend-item"><div class="seat current-moving"></div><span>이동 선택됨</span></div>
+                    <div class="legend-item"><div class="seat selected"></div><span>이동할 자리</span></div>
+                    <div class="legend-item"><div class="seat reserved"></div><span>예매 완료</span></div>
+                </div>
+            </div>
+            <button id="change-seat-confirm-btn" class="btn btn-primary" onclick="confirmSeatChange()" disabled
+                style="width: 100%; padding: 1rem; font-size: 1.1rem; border-radius: 12px; margin-top: 1.5rem;">
+                변경 확정
+            </button>
+        </main>
+    </div>
+
     <!-- Page transition overlay -->
     <div id="page-overlay" class="page-overlay"></div>
 
