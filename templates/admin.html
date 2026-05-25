@@ -65,7 +65,8 @@
 <body class="admin-body">
     <header class="admin-header">
         <h1>티켓 발권 및 관리 (어드민)</h1>
-        <div>
+        <div style="display:flex; gap:0.5rem;">
+            <button id="export-btn" class="btn btn-secondary" onclick="exportCSV()">📥 내보내기</button>
             <button id="refresh-btn" class="btn btn-secondary">새로고침</button>
         </div>
     </header>
@@ -463,6 +464,49 @@
                 btn.disabled = false;
                 btn.innerText = '수정 완료';
             }
+        }
+
+        function exportCSV() {
+            let filtered = reservationsData;
+            if (currentTab !== 'all') {
+                filtered = reservationsData.filter(r => r.session_id == currentTab);
+            }
+            if (currentStatus !== 'all') {
+                filtered = filtered.filter(r => currentStatus === 'pending' ? !r.claimed : r.claimed);
+            }
+
+            const headers = ['예매번호', '회차', '이름', '연락처', '좌석', '예매일시', '상태'];
+            const rows = filtered.map(r => {
+                const seat = r.seat_id.includes('_') ? r.seat_id.split('_')[1] : r.seat_id;
+                return [
+                    r.id,
+                    sessionMap[r.session_id] || r.session_id + '회차',
+                    r.user_name,
+                    r.phone,
+                    seat,
+                    r.created_at || '-',
+                    r.claimed ? '발권완료' : '미발권'
+                ];
+            });
+
+            const csv = [headers, ...rows]
+                .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                .join('\n');
+
+            // BOM(﻿) 추가 — Excel에서 한국어 깨짐 방지
+            const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+
+            const tabLabel = currentTab === 'all' ? '전체' : (sessionMap[currentTab] || currentTab);
+            const statusLabel = { pending: '미발권', claimed: '발권완료', all: '전체' }[currentStatus];
+            const date = new Date().toLocaleDateString('ko-KR', { month:'2-digit', day:'2-digit' }).replace(/\. /g,'-').replace('.','');
+            a.href = url;
+            a.download = `예매내역_${tabLabel}_${statusLabel}_${date}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         document.getElementById('refresh-btn').addEventListener('click', loadReservations);
