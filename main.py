@@ -4,6 +4,7 @@ from flask_limiter.util import get_remote_address
 import secrets
 import hashlib
 import os
+import csv
 from datetime import timedelta
 from functools import wraps
 from sqlalchemy.orm import Session
@@ -12,6 +13,20 @@ import database, models
 def hash_password(raw: str) -> str:
     salt = os.environ.get('PASSWORD_SALT', 'default-salt')
     return hashlib.sha256(f"{salt}:{raw}".encode()).hexdigest()
+
+# --- Alumni List ---
+ALUMNI = {}  # { phone: name }
+_alumni_path = os.path.join(os.path.dirname(__file__), 'alumni.csv')
+if os.path.exists(_alumni_path):
+    with open(_alumni_path, encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # 컬럼명 유연하게 처리 (핸드폰 / 휴대폰 / 전화번호)
+            phone = (row.get('핸드폰') or row.get('휴대폰') or row.get('전화번호') or '').strip()
+            name  = row.get('이름', '').strip()
+            if phone:
+                ALUMNI[phone] = name
+    print(f"[alumni] {len(ALUMNI)}명 로드 완료")
 
 # DB Schema init
 models.Base.metadata.create_all(bind=database.engine)
@@ -327,7 +342,8 @@ def get_admin_reservations():
     return jsonify([{
         "id": r.id, "session_id": r.session_id, "seat_id": r.seat_id,
         "user_name": r.user_name, "phone": r.phone, "claimed": r.claimed,
-        "created_at": (r.created_at + timedelta(hours=9)).strftime("%m/%d %H:%M") if r.created_at else ""
+        "created_at": (r.created_at + timedelta(hours=9)).strftime("%m/%d %H:%M") if r.created_at else "",
+        "alumni_name": ALUMNI.get(r.phone)
     } for r in reservations])
 
 @app.route("/api/admin/claim/bulk", methods=["POST"])

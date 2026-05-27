@@ -46,6 +46,25 @@
         }
         .status-btn:not(.active) .status-count { background: #1e293b; color: #94a3b8; }
 
+        .alumni-badge {
+            display: inline-block;
+            background: #7c3aed;
+            color: white;
+            font-size: 0.62rem;
+            font-weight: 700;
+            padding: 0.08rem 0.35rem;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        /* No wrapping on table cells except 회차 */
+        .reservation-table td { white-space: nowrap; }
+        .reservation-table td.col-name {
+            max-width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         /* Big checkboxes for fast ticket claiming */
         .reservation-table input[type="checkbox"] {
             width: 1.5rem; height: 1.5rem;
@@ -108,6 +127,7 @@
                     <th>좌석</th>
                     <th>예매 일시</th>
                     <th>상태</th>
+                    <th>비고</th>
                     <th>단일액션</th>
                 </tr>
             </thead>
@@ -232,7 +252,7 @@
                     <td><input type="checkbox" class="row-check" value="${r.id}" onchange="updateActionBar()"></td>
                     <td>${r.id}</td>
                     <td><strong>${sessionMap[r.session_id] || r.session_id + '회차'}</strong></td>
-                    <td>${r.user_name}</td>
+                    <td class="col-name" title="${r.user_name}">${r.user_name}</td>
                     <td>${r.phone}</td>
                     <td><strong style="color: var(--primary);">${displaySeat}</strong></td>
                     <td style="color:#64748b; font-size:0.85rem; white-space:nowrap;">${r.created_at || '-'}</td>
@@ -240,6 +260,9 @@
                         <span class="status-badge ${r.claimed ? 'claimed' : 'pending'}">
                             ${r.claimed ? '수령 완료' : '대기중'}
                         </span>
+                    </td>
+                    <td>
+                        ${r.alumni_name ? `<span class="alumni-badge">👴</span>` : ''}
                     </td>
                     <td>
                         ${!r.claimed ? `<button class="btn btn-small" onclick="claimTicket(${r.id})" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">발권</button>` : ''}
@@ -475,7 +498,7 @@
                 filtered = filtered.filter(r => currentStatus === 'pending' ? !r.claimed : r.claimed);
             }
 
-            const headers = ['예매번호', '회차', '이름', '연락처', '좌석', '예매일시', '상태'];
+            const headers = ['예매번호', '회차', '이름', '연락처', '좌석', '예매일시', '상태', '비고'];
             const rows = filtered.map(r => {
                 const seat = r.seat_id.includes('_') ? r.seat_id.split('_')[1] : r.seat_id;
                 return [
@@ -485,7 +508,8 @@
                     r.phone,
                     seat,
                     r.created_at || '-',
-                    r.claimed ? '발권완료' : '미발권'
+                    r.claimed ? '발권완료' : '미발권',
+                    r.alumni_name ? '선배' : ''
                 ];
             });
 
