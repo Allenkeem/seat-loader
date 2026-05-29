@@ -366,6 +366,16 @@ def claim_ticket(reservation_id):
     g.db.commit()
     return jsonify({"status": "success"})
 
+@app.route("/api/admin/unclaim/<int:reservation_id>", methods=["POST"])
+@requires_auth
+def unclaim_ticket(reservation_id):
+    reservation = g.db.query(models.Reservation).filter(models.Reservation.id == reservation_id).first()
+    if not reservation:
+        return jsonify({"detail": "Reservation not found"}), 404
+    reservation.claimed = False
+    g.db.commit()
+    return jsonify({"status": "success"})
+
 @app.route("/api/admin/edit", methods=["POST"])
 @requires_auth
 def edit_reservation():
