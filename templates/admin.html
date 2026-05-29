@@ -201,13 +201,12 @@
             } catch(e) { console.error(e); }
         }
 
-        async function loadReservations(preserveScroll = false) {
+        async function loadReservations(savedScrollY = 0) {
             if (Object.keys(sessionMap).length === 0) await fetchSessions();
-            const scrollY = preserveScroll ? window.scrollY : 0;
             const res = await fetch('/api/admin/reservations');
             reservationsData = await res.json();
             renderTable();
-            if (preserveScroll) window.scrollTo(0, scrollY);
+            if (savedScrollY > 0) window.scrollTo(0, savedScrollY);
         }
 
         function filterSession(tabId) {
@@ -300,20 +299,23 @@
         }
 
         async function claimTicket(id) {
+            const scrollY = window.scrollY;
             if(!confirm("해당 티켓을 발권 처리하시겠습니까?")) return;
             const res = await fetch(`/api/admin/claim/${id}`, { method: 'POST' });
-            if(res.ok) loadReservations(true);
+            if(res.ok) loadReservations(scrollY);
             else alert("오류가 발생했습니다.");
         }
 
         async function unclaimTicket(id) {
+            const scrollY = window.scrollY;
             if(!confirm("발권을 취소하시겠습니까? (예매는 유지됩니다)")) return;
             const res = await fetch(`/api/admin/unclaim/${id}`, { method: 'POST' });
-            if(res.ok) loadReservations(true);
+            if(res.ok) loadReservations(scrollY);
             else alert("오류가 발생했습니다.");
         }
 
         async function bulkClaimSelected() {
+            const scrollY = window.scrollY;
             const ids = getSelectedIds();
             if (ids.length === 0) return;
             if(!confirm(`선택된 ${ids.length}매의 티켓을 일괄 발권 처리하시겠습니까?`)) return;
@@ -326,13 +328,14 @@
 
             if(res.ok) {
                 alert("일괄 발권이 완료되었습니다.");
-                loadReservations(true);
+                loadReservations(scrollY);
             } else {
                 alert("오류가 발생했습니다.");
             }
         }
 
         async function bulkCancelSelected() {
+            const scrollY = window.scrollY;
             const ids = getSelectedIds();
             if (ids.length === 0) return;
             if(!confirm(`⚠️ 선택된 ${ids.length}매의 예매 내역을 강제로 파기(취소)하시겠습니까?\n이 작업은 되돌릴 수 없으며, 묶여있던 모든 좌석이 즉시 빈자리로 대방출됩니다.`)) return;
@@ -345,7 +348,7 @@
 
             if(res.ok) {
                 alert("성공적으로 예매가 취소되었습니다.");
-                loadReservations();
+                loadReservations(scrollY);
             } else {
                 alert("취소 처리 중 오류가 발생했습니다.");
             }
