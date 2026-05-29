@@ -201,12 +201,13 @@
             } catch(e) { console.error(e); }
         }
 
-        async function loadReservations() {
+        async function loadReservations(preserveScroll = false) {
             if (Object.keys(sessionMap).length === 0) await fetchSessions();
-            
+            const scrollY = preserveScroll ? window.scrollY : 0;
             const res = await fetch('/api/admin/reservations');
             reservationsData = await res.json();
             renderTable();
+            if (preserveScroll) window.scrollTo(0, scrollY);
         }
 
         function filterSession(tabId) {
@@ -265,7 +266,10 @@
                         ${r.alumni_name ? `<span class="alumni-badge">👴</span>` : ''}
                     </td>
                     <td>
-                        ${!r.claimed ? `<button class="btn btn-small" onclick="claimTicket(${r.id})" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">발권</button>` : ''}
+                        ${!r.claimed
+                            ? `<button class="btn btn-small" onclick="claimTicket(${r.id})" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">발권</button>`
+                            : `<button class="btn btn-small" onclick="unclaimTicket(${r.id})" style="padding: 0.2rem 0.6rem; font-size: 0.75rem; background:#64748b; color:white; border:none;">발권취소</button>`
+                        }
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -298,7 +302,14 @@
         async function claimTicket(id) {
             if(!confirm("해당 티켓을 발권 처리하시겠습니까?")) return;
             const res = await fetch(`/api/admin/claim/${id}`, { method: 'POST' });
-            if(res.ok) loadReservations();
+            if(res.ok) loadReservations(true);
+            else alert("오류가 발생했습니다.");
+        }
+
+        async function unclaimTicket(id) {
+            if(!confirm("발권을 취소하시겠습니까? (예매는 유지됩니다)")) return;
+            const res = await fetch(`/api/admin/unclaim/${id}`, { method: 'POST' });
+            if(res.ok) loadReservations(true);
             else alert("오류가 발생했습니다.");
         }
 
@@ -315,7 +326,7 @@
 
             if(res.ok) {
                 alert("일괄 발권이 완료되었습니다.");
-                loadReservations();
+                loadReservations(true);
             } else {
                 alert("오류가 발생했습니다.");
             }
