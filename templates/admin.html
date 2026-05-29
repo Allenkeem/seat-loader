@@ -201,12 +201,13 @@
             } catch(e) { console.error(e); }
         }
 
-        async function loadReservations() {
+        async function loadReservations(preserveScroll = false) {
             if (Object.keys(sessionMap).length === 0) await fetchSessions();
-            
+            const scrollY = preserveScroll ? window.scrollY : 0;
             const res = await fetch('/api/admin/reservations');
             reservationsData = await res.json();
             renderTable();
+            if (preserveScroll) window.scrollTo(0, scrollY);
         }
 
         function filterSession(tabId) {
@@ -298,7 +299,7 @@
         async function claimTicket(id) {
             if(!confirm("해당 티켓을 발권 처리하시겠습니까?")) return;
             const res = await fetch(`/api/admin/claim/${id}`, { method: 'POST' });
-            if(res.ok) loadReservations();
+            if(res.ok) loadReservations(true);
             else alert("오류가 발생했습니다.");
         }
 
@@ -315,7 +316,7 @@
 
             if(res.ok) {
                 alert("일괄 발권이 완료되었습니다.");
-                loadReservations();
+                loadReservations(true);
             } else {
                 alert("오류가 발생했습니다.");
             }
